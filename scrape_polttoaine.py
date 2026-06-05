@@ -6,8 +6,6 @@ def scrape_fuels():
 
     today = datetime.utcnow().strftime("%Y-%m-%d")
 
-    rows = []
-
     SYMBOLS = {
         "WTI_OIL": "cl.f",
         "BRENT_OIL": "cb.f",
@@ -21,48 +19,48 @@ def scrape_fuels():
         "Accept": "text/csv"
     }
 
-    for name, symbol in SYMBOLS.items():
+    rows = []
 
-        print(f"🔎 Hakee {name} (Stooq LAST)")
+    for name, symbol in SYMBOLS.items():
+        print(f"🔎 Hakee {name}")
 
         try:
-            params = {
-                "s": symbol,
-                "f": "sd2t2ohlcv",
-                "h": "",
-                "e": "csv"
-            }
+            url = f"https://stooq.com/q/d/l/?s={symbol}&i=d"
+            r = requests.get(url, headers=headers, timeout=10)
 
-            r = requests.get(
-                "https://stooq.com/q/l/",
-                params=params,
-                headers=headers
-            )
+            # Tarkista että saatiin oikea CSV
+            if "Date,Open,High,Low,Close,Volume" not in r.text:
+                print(f"⚠️ {name} blocked or invalid data")
+                rows.append([name, symbol, None, today])
+                continue
 
-            last_price = None
-
-            lines = [l for l in r.text.splitlines() if l.strip()]
+            lines = r.text.strip().split("\n")
 
             if len(lines) >= 2:
-                data = lines[1].split(",")
+                last_line = lines[-1]
+                data = last_line.split(",")
 
-                if len(data) > 6:
-                    val = data[6]
-                    last_price = None if val in ["", "N/D"] else val
+                if len(data) >= 5:
+                    close_price = data[4]
+                else:
+                    close_price = None
+            else:
+                close_price = None
 
-            rows.append([
-                name,
-                symbol,
-                last_price,
-                today
-            ])
+            rows.append([name, symbol, close_price, today])
 
         except Exception as e:
             print(f"⚠️ {name} fail: {e}")
+            rows.append([name, symbol, None, today])
 
-    return rows
+    # ✅ Tallenna CSV
+    with open("latest_fuel.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["name", "symbol", "price", "date"])
+        writer.writerows(rows)
+
+    print("✅ Tallennettu latest_fuel.csv")
 
 
 if __name__ == "__main__":
-    data = scrape_fuels()
-    print(data)
+    scrape_fuels()
