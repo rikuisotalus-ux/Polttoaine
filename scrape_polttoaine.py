@@ -74,4 +74,4 @@ def scrape_fuels():
         except Exception as e:
             print(f"⚠️ {name} fail: {e}")
 if __name__ == "__main__":
-    scrape_all()
+    scrape_fuels()
