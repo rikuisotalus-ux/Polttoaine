@@ -1,17 +1,8 @@
 import requests
 import csv
 from datetime import datetime
-import re
-import os
-# POLTTOAINETESTI
 
 def scrape_fuels():
-
-    import requests
-    import csv
-    import os
-    from datetime import datetime
-    import pandas as pd
 
     today = datetime.utcnow().strftime("%Y-%m-%d")
 
@@ -55,7 +46,6 @@ def scrape_fuels():
             if len(lines) >= 2:
                 data = lines[1].split(",")
 
-                # ✅ .f symboleilla CLOSE = index 6
                 if len(data) > 6:
                     val = data[6]
                     last_price = None if val in ["", "N/D"] else val
@@ -64,14 +54,15 @@ def scrape_fuels():
                 name,
                 symbol,
                 last_price,
-                None,
-                None,
-                None,
-                None,
                 today
             ])
 
         except Exception as e:
             print(f"⚠️ {name} fail: {e}")
+
+    return rows
+
+
 if __name__ == "__main__":
-    scrape_fuels()
+    data = scrape_fuels()
+    print(data)
