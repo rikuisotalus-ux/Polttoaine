@@ -2,25 +2,35 @@ import csv
 import requests
 from datetime import datetime
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "text/csv",
+}
+
 
 # =========================
-# ✅ STOOQ LIVE ENDPOINT
+# ✅ STOOQ (FIXED)
 # =========================
 def get_stooq(symbol):
     try:
         url = f"https://stooq.com/q/l/?s={symbol}&f=sd2t2ohlcv&h&e=csv"
 
-        r = requests.get(url, timeout=10)
+        r = requests.get(url, headers=HEADERS, timeout=10)
 
-        lines = r.text.strip().split("\n")
+        text = r.text.strip()
 
-        # jos ei dataa → return None
+        # varmista että oikea CSV eikä tyhjä/HTML
+        if "Close" not in text:
+            print(f"{symbol} -> no CSV data")
+            return None
+
+        lines = text.split("\n")
+
         if len(lines) < 2:
             return None
 
         row = lines[1].split(",")
 
-        # Close price = index 6
         return float(row[6])
 
     except Exception as e:
@@ -42,7 +52,7 @@ def run():
     rows.append(["TTF", "tg.f", get_stooq("tg.f"), today])
     rows.append(["CO2_EUA", "ck.f", get_stooq("ck.f"), today])
 
-    # COAL ei ole saatavilla ilmaisena → jätetään None
+    # Coal ei ole saatavilla ilmaiseksi → jätetään None
     rows.append(["COAL_API2", "api2", None, today])
 
     with open("latest_fuels.csv", "w", newline="") as f:
