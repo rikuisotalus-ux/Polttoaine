@@ -4,23 +4,24 @@ from datetime import datetime
 
 
 # =========================
-# ✅ STOOQ (oikea endpoint)
+# ✅ STOOQ LIVE ENDPOINT
 # =========================
 def get_stooq(symbol):
     try:
-        url = f"https://stooq.com/q/d/l/?s={symbol}&i=d"
+        url = f"https://stooq.com/q/l/?s={symbol}&f=sd2t2ohlcv&h&e=csv"
 
         r = requests.get(url, timeout=10)
 
-        lines = r.text.splitlines()
+        lines = r.text.strip().split("\n")
 
+        # jos ei dataa → return None
         if len(lines) < 2:
             return None
 
-        last = lines[-1].split(",")
+        row = lines[1].split(",")
 
-        # Close price (index 4)
-        return float(last[4])
+        # Close price = index 6
+        return float(row[6])
 
     except Exception as e:
         print(f"{symbol} error:", e)
@@ -36,22 +37,14 @@ def run():
 
     rows = []
 
-    # ✅ Oil
     rows.append(["WTI", "cl.f", get_stooq("cl.f"), today])
     rows.append(["BRENT", "bz.f", get_stooq("bz.f"), today])
-
-    # ✅ TTF (ICE gas)
     rows.append(["TTF", "tg.f", get_stooq("tg.f"), today])
-
-    # ✅ CO2 (EUA futures)
     rows.append(["CO2_EUA", "ck.f", get_stooq("ck.f"), today])
 
-    # ✅ COAL → ei oikeaa ilmaista → jätetään None
+    # COAL ei ole saatavilla ilmaisena → jätetään None
     rows.append(["COAL_API2", "api2", None, today])
 
-    # =========================
-    # ✅ WRITE CSV
-    # =========================
     with open("latest_fuels.csv", "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["Product", "Symbol", "Price", "Date"])
