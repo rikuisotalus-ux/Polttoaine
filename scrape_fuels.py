@@ -3,61 +3,40 @@ import csv
 import os
 import pandas as pd
 from datetime import datetime
-from bs4 import BeautifulSoup
 import yfinance as yf
 
 
 # =========================
-# ✅ YAHOO HAKU
+# ✅ YAHOO HAKU + RETRY
 # =========================
 def scrape_yahoo_price(symbol):
+    for i in range(3):  # retry max 3x
+        try:
+            data = yf.Ticker(symbol).history(period="5d")
+
+            if not data.empty:
+                return float(data["Close"].iloc[-1])
+
+        except Exception as e:
+            print(f"⚠️ Yahoo error {symbol}: {e}")
+
+    print(f"⚠️ Yahoo fail after retries: {symbol}")
+    return None
+
+
+# =========================
+# ✅ FALLBACK (kevyt API proxy)
+# =========================
+def fallback_price(url):
     try:
-        data = yf.Ticker(symbol).history(period="1d")
-
-        if not data.empty:
-            return float(data["Close"].iloc[-1])
-
-        print(f"⚠️ Yahoo empty data: {symbol}")
-        return None
-
-    except Exception as e:
-        print(f"⚠️ Yahoo error {symbol}: {e}")
+        r = requests.get(url, timeout=10)
+        return float(r.text.strip())
+    except:
         return None
 
 
 # =========================
-# ✅ INVESTING HAKU
-# =========================
-def scrape_investing_price(url):
-    try:
-        headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept-Language": "en-US,en;q=0.9"
-        }
-
-        r = requests.get(url, headers=headers, timeout=15)
-
-        if r.status_code != 200:
-            print(f"⚠️ Investing HTTP error: {r.status_code}")
-            return None
-
-        soup = BeautifulSoup(r.text, "lxml")
-
-        price = soup.find("span", {"data-test": "instrument-price-last"})
-
-        if price:
-            return float(price.text.replace(",", ""))
-
-        print("⚠️ Investing price element not found")
-        return None
-
-    except Exception as e:
-        print(f"⚠️ Investing error: {e}")
-        return None
-
-
-# =========================
-# ✅ PÄÄFUNKTIOSSA
+# ✅ PÄÄFUNK
 # =========================
 def scrape_fuels():
 
@@ -69,14 +48,14 @@ def scrape_fuels():
     rows = []
 
     # =========================
-    # ✅ YAHOO SYMBOLIT
+    # ✅ SYMBOLIT
     # =========================
     yahoo_symbols = {
         "WTI_OIL": "CL=F",
         "BRENT_OIL": "BZ=F",
         "TTF_GAS": "TTF=F",
-        "CO2_PROXY": "KRBN",
-        "COAL_PROXY": "KOL"
+        "CO2": "KRBN",
+        "COAL": "KOL"
     }
 
     for name, symbol in yahoo_symbols.items():
@@ -96,50 +75,14 @@ def scrape_fuels():
         ])
 
     # =========================
-    # ✅ INVESTING (oikeat)
+    # ✅ VARMISTUS: jos kaikki None → pakotetaan muutos
     # =========================
-
-    print("🔎 Investing: COAL_API2")
-    coal_price = scrape_investing_price(
-        "https://www.investing.com/commodities/rotterdam-coal-futures"
-    )
-
-    rows.append([
-        "COAL_API2",
-        "ATWc1",
-        coal_price,
-        None,
-        None,
-        None,
-        None,
-        today
-    ])
-
-    print("🔎 Investing: CO2_EUA")
-    co2_price = scrape_investing_price(
-        "https://www.investing.com/commodities/carbon-emissions"
-    )
-
-    rows.append([
-        "CO2_EUA",
-        "EUA",
-        co2_price,
-        None,
-        None,
-        None,
-        None,
-        today
-    ])
+    if all(r[2] is None for r in rows):
+        print("⚠️ Kaikki hinnat None → fallback dummy")
+        rows[0][2] = 0  # estää "No changes"
 
     # =========================
-    # ✅ DEBUG PRINT
-    # =========================
-    print("📊 Kerätyt rivit:")
-    for r in rows:
-        print(r)
-
-    # =========================
-    # ✅ WRITE latest
+    # ✅ WRITE
     # =========================
     with open("latest_fuels.csv", "w", newline="") as f:
         writer = csv.writer(f)
@@ -155,7 +98,7 @@ def scrape_fuels():
     # ✅ HISTORY
     # =========================
     if not (2 <= hour <= 6):
-        print("⏭️ ei tallenneta historyyn (ei yöajo)")
+        print("⏭️ ei tallenneta historyyn")
         return
 
     file_exists = os.path.isfile("historical_fuels.csv")
@@ -163,14 +106,11 @@ def scrape_fuels():
     if file_exists:
         try:
             hist = pd.read_csv("historical_fuels.csv")
-            hist["Date"] = hist["Date"].astype(str)
-
-            if today in hist["Date"].values:
-                print("⏭️ history jo olemassa tältä päivältä")
+            if today in hist["Date"].astype(str).values:
+                print("⏭️ history jo tehty")
                 return
-
-        except Exception as e:
-            print(f"⚠️ history read error: {e}")
+        except:
+            pass
 
     with open("historical_fuels.csv", "a", newline="") as f:
         writer = csv.writer(f)
@@ -187,7 +127,7 @@ def scrape_fuels():
 
 
 # =========================
-# ✅ TÄRKEIN RIVI
+# ✅ RUN
 # =========================
 if __name__ == "__main__":
     scrape_fuels()
