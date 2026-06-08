@@ -2,7 +2,7 @@ name: Scrape fuels
 
 on:
   schedule:
-    - cron: "0 * * * *"   # ajaa joka tunti
+    - cron: "0 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -10,33 +10,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # ✅ TÄMÄ OLI SUN PUUTTUVA OSA
-      - name: Install dependencies
-        run: pip install requests pandas yfinance beautifulsoup4 lxml
+      - run: pip install requests pandas yfinance
 
-      - name: Run scraper
-        run: python scrape_fuels.py
+      - run: python scrape_fuels.py
 
-      # ✅ DEBUG (näet että CSV syntyy)
-      - name: List files
-        run: ls -l
+      - run: ls -l
 
-      # ✅ COMMIT MUUTOKSET
-      - name: Commit and push
+      - name: Commit
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          git add latest_fuels.csv || true
-          git add historical_fuels.csv || true
+          git add *.csv || true
 
           if ! git diff --cached --quiet; then
             git commit -m "Update fuel prices"
