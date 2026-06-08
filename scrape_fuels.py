@@ -4,34 +4,27 @@ from datetime import datetime
 
 
 # =========================
-# ✅ STOOQ CSV FETCH
+# ✅ STOOQ (oikea endpoint)
 # =========================
 def get_stooq(symbol):
     try:
-        url = f"https://stooq.com/q/l/?s={symbol}&f=sd2t2ohlcv&h&e=csv"
+        url = f"https://stooq.com/q/d/l/?s={symbol}&i=d"
 
         r = requests.get(url, timeout=10)
 
         lines = r.text.splitlines()
 
-        if len(lines) > 1:
-            last = lines[-1].split(",")
+        if len(lines) < 2:
+            return None
 
-            price = float(last[6])  # close
+        last = lines[-1].split(",")
 
-            return price
+        # Close price (index 4)
+        return float(last[4])
 
     except Exception as e:
         print(f"{symbol} error:", e)
-
-    return None
-
-
-# =========================
-# ✅ COAL (yritetään stooq commodity)
-# =========================
-def get_coal():
-    return get_stooq("coal")  # usein None → hyväksytään
+        return None
 
 
 # =========================
@@ -43,20 +36,22 @@ def run():
 
     rows = []
 
-    # ✅ OIL (Yahoo korvattu Stooqlla)
-    rows.append(["WTI", "CL.F", get_stooq("cl.f"), today])
-    rows.append(["BRENT", "BZ.F", get_stooq("bz.f"), today])
+    # ✅ Oil
+    rows.append(["WTI", "cl.f", get_stooq("cl.f"), today])
+    rows.append(["BRENT", "bz.f", get_stooq("bz.f"), today])
 
-    # ✅ TTF (oikea)
-    rows.append(["TTF", "TG.F", get_stooq("tg.f"), today])
+    # ✅ TTF (ICE gas)
+    rows.append(["TTF", "tg.f", get_stooq("tg.f"), today])
 
-    # ✅ CO2 (oikea)
-    rows.append(["CO2_EUA", "CK.F", get_stooq("ck.f"), today])
+    # ✅ CO2 (EUA futures)
+    rows.append(["CO2_EUA", "ck.f", get_stooq("ck.f"), today])
 
-    # ✅ COAL (voi olla None)
-    rows.append(["COAL_API2", "COAL", get_coal(), today])
+    # ✅ COAL → ei oikeaa ilmaista → jätetään None
+    rows.append(["COAL_API2", "api2", None, today])
 
+    # =========================
     # ✅ WRITE CSV
+    # =========================
     with open("latest_fuels.csv", "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["Product", "Symbol", "Price", "Date"])
