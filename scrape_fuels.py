@@ -1,12 +1,52 @@
-def scrape_fuels():
+import requests
+import csv
+import os
+import pandas as pd
+from datetime import datetime
+from bs4 import BeautifulSoup
+import yfinance as yf
 
-    import requests
-    import csv
-    import os
-    import pandas as pd
-    from datetime import datetime
-    from bs4 import BeautifulSoup
-    import yfinance as yf
+
+def scrape_yahoo_price(symbol):
+    try:
+        data = yf.Ticker(symbol).history(period="1d")
+        if not data.empty:
+            return float(data["Close"].iloc[-1])
+    except Exception as e:
+        print(f"⚠️ Yahoo error {symbol}: {e}")
+    return None
+
+
+def scrape_investing_price(url):
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept-Language": "en-US,en;q=0.9"
+        }
+
+        r = requests.get(url, headers=headers, timeout=15)
+
+        if r.status_code != 200:
+            print(f"⚠️ Investing HTTP {r.status_code}")
+            return None
+
+        soup = BeautifulSoup(r.text, "lxml")
+
+        price = soup.find("span", {"data-test": "instrument-price-last"})
+
+        if price:
+            return float(price.text.replace(",", ""))
+
+        print("⚠️ Investing price not found")
+        return None
+
+    except Exception as e:
+        print(f"⚠️ Investing error: {e}")
+        return None
+
+
+def scrape_fuels():
+    print("🚀 scrape_fuels käynnistyi")
 
     today = datetime.utcnow().strftime("%Y-%m-%d")
     hour = datetime.utcnow().hour
@@ -14,52 +54,24 @@ def scrape_fuels():
     rows = []
 
     # =========================
-    # ✅ YAHOO SYMBOLIT
+    # ✅ YAHOO DATA
     # =========================
-    YAHOO_SYMBOLS = {
+    yahoo_symbols = {
         "WTI_OIL": "CL=F",
         "BRENT_OIL": "BZ=F",
-        "TTF_GAS": "TTF=F",   # ✅ oikea
-        "CO2": "KRBN",        # proxy
-        "COAL": "KOL"         # proxy fallback
+        "TTF_GAS": "TTF=F",
+        "CO2_PROXY": "KRBN",
+        "COAL_PROXY": "KOL",
     }
 
-    # =========================
-    # ✅ INVESTING (oikeat tuotteet)
-    # =========================
-    INVESTING_URLS = {
-        "COAL_API2": "https://www.investing.com/commodities/rotterdam-coal-futures",
-        "CO2_EUA": "https://www.investing.com/commodities/carbon-emissions"
-    }
-
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept-Language": "en-US,en;q=0.9"
-    }
-
-    # =========================
-    # ✅ YAHOO HAKU
-    # =========================
-
-    for name, symbol in YAHOO_SYMBOLS.items():
-
+    for name, symbol in yahoo_symbols.items():
         print(f"🔎 Yahoo: {name}")
-
-        last_price = None
-
-        try:
-            data = yf.Ticker(symbol).history(period="1d")
-
-            if not data.empty:
-                last_price = float(data["Close"].iloc[-1])
-
-        except Exception as e:
-            print(f"⚠️ Yahoo fail {name}: {e}")
+        price = scrape_yahoo_price(symbol)
 
         rows.append([
             name,
             symbol,
-            last_price,
+            price,
             None,
             None,
             None,
@@ -68,28 +80,12 @@ def scrape_fuels():
         ])
 
     # =========================
-    # ✅ INVESTING SCRAPER
+    # ✅ INVESTING DATA (Oikeat benchmarkit)
     # =========================
 
-    def scrape_investing(url):
-        try:
-            r = requests.get(url, headers=headers)
-            soup = BeautifulSoup(r.text, "html.parser")
-
-            price = soup.find("span", {"data-test": "instrument-price-last"})
-
-            if price:
-                return float(price.text.replace(",", ""))
-        except Exception as e:
-            print(f"⚠️ Investing fail: {e}")
-
-        return None
-
-    # =========================
-    # ✅ COAL API2 (oikea)
-    # =========================
-
-    coal_price = scrape_investing(INVESTING_URLS["COAL_API2"])
+    coal_price = scrape_investing_price(
+        "https://www.investing.com/commodities/rotterdam-coal-futures"
+    )
 
     rows.append([
         "COAL_API2",
@@ -102,11 +98,9 @@ def scrape_fuels():
         today
     ])
 
-    # =========================
-    # ✅ EUA (oikea)
-    # =========================
-
-    co2_price = scrape_investing(INVESTING_URLS["CO2_EUA"])
+    co2_price = scrape_investing_price(
+        "https://www.investing.com/commodities/carbon-emissions"
+    )
 
     rows.append([
         "CO2_EUA",
@@ -119,8 +113,12 @@ def scrape_fuels():
         today
     ])
 
+    print("📊 Kerätyt rivit:")
+    for r in rows:
+        print(r)
+
     # =========================
-    # ✅ WRITE latest
+    # ✅ WRITE latest_fuels.csv
     # =========================
 
     with open("latest_fuels.csv", "w", newline="") as f:
@@ -131,10 +129,10 @@ def scrape_fuels():
         ])
         writer.writerows(rows)
 
-    print("✅ latest_fuels.csv päivitetty")
+    print("✅ latest_fuels.csv kirjoitettu")
 
     # =========================
-    # ✅ HISTORY (YÖ)
+    # ✅ HISTORY (yöllä)
     # =========================
 
     if not (2 <= hour <= 6):
@@ -151,8 +149,8 @@ def scrape_fuels():
             if today in hist["Date"].values:
                 print("⏭️ history jo olemassa tältä päivältä")
                 return
-        except:
-            pass
+        except Exception as e:
+            print(f"⚠️ history read error: {e}")
 
     with open("historical_fuels.csv", "a", newline="") as f:
         writer = csv.writer(f)
@@ -166,3 +164,10 @@ def scrape_fuels():
         writer.writerows(rows)
 
     print("✅ historical_fuels.csv päivitetty")
+
+
+# =========================
+# ✅ TÄMÄ OLI PUUTTUVA OSA
+# =========================
+if __name__ == "__main__":
+    scrape_fuels()
