@@ -34,7 +34,13 @@ def scrape_cme_ttf():
     session.headers.update(HEADERS)
 
     response = session.get(URL, timeout=30)
-    response.raise_for_status()
+    print("STATUS:", response.status_code)
+
+    if response.status_code != 200:
+        print(response.text[:2000])
+        raise Exception(
+        f"HTTP error {response.status_code}"
+    )
 
     tables = pd.read_html(response.text)
 
