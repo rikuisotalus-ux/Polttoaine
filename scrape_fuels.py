@@ -1,18 +1,38 @@
 import requests
+import json
 
-url = "https://www.barchart.com/proxies/core-api/v1/quotes/get"
+URL = "https://scanner.tradingview.com/futures/scan"
 
-params = {
-    "symbol": "TG^F",
-    "fields": (
-        "symbol,contractName,lastPrice,"
-        "priceChange,highPrice,lowPrice,volume"
-    ),
-    "raw": 1,
-    "limit": 6
+payload = {
+    "symbols": {
+        "tickers": [
+            "NYMEX:TTFZ2026"
+        ],
+        "query": {
+            "types": []
+        }
+    },
+    "columns": [
+        "name",
+        "close",
+        "change",
+        "high",
+        "low",
+        "volume"
+    ]
 }
 
-r = requests.get(url)
+headers = {
+    "User-Agent": "Mozilla/5.0",
+    "Content-Type": "application/json"
+}
+
+r = requests.post(
+    URL,
+    json=payload,
+    headers=headers,
+    timeout=30
+)
 
 print("STATUS:", r.status_code)
-print(r.text[:1000])
+print(r.text[:5000])
