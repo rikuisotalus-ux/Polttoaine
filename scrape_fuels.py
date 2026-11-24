@@ -1,102 +1,69 @@
-import pandas as pd
+import requests
 import csv
 from datetime import datetime
-import requests
 
-URL = (
-    "https://www.cmegroup.com/markets/energy/natural-gas/"
-    "dutch-ttf-natural-gas-financial-calendar-month.settlements.html"
-)
+URL = "https://www.cmegroup.com/CmeWS/mvc/Settlements/Futures/Settlements/8378/FUT"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0"
+    "User-Agent": "Mozilla/5.0",
+    "Referer": "https://www.cmegroup.com/markets/energy/natural-gas/dutch-ttf-natural-gas-calendar-month.settlements.html",
+    "Accept": "application/json"
 }
 
 
-def build_product_code(month_str):
+def build_product_code(month):
     """
     DEC 26 -> TTFDEC-26
     JAN 27 -> TTFJAN-27
     """
 
     try:
-        month, yy = month_str.upper().split()
-        return f"TTF{month}-{yy}"
-    except Exception:
+        mon, yy = month.split()
+        return f"TTF{mon.upper()}-{yy}"
+    except:
         return None
 
 
 def scrape_cme_ttf():
 
-    print("Hakee CME TTF settlementit...")
+    params = {
+        "strategy": "DEFAULT",
+        "pageSize": 500
+    }
 
-    session = requests.Session()
-    session.headers.update(HEADERS)
-
-    response = session.get(URL, timeout=30)
-    print("STATUS:", response.status_code)
-
-    if response.status_code != 200:
-        print(response.text[:2000])
-        raise Exception(
-        f"HTTP error {response.status_code}"
+    response = requests.get(
+        URL,
+        params=params,
+        headers=HEADERS,
+        timeout=30
     )
 
-    tables = pd.read_html(response.text)
+    print("STATUS:", response.status_code)
 
-    if not tables:
-        raise Exception("Taulukkoa ei löytynyt")
+    data = response.json()
 
-    settlement_table = None
-
-    for table in tables:
-        cols = [str(c).upper() for c in table.columns]
-
-        if "MONTH" in cols and "SETTLE" in cols:
-            settlement_table = table
-            break
-
-    if settlement_table is None:
-        raise Exception("Settlement-taulukkoa ei löytynyt")
+    settlements = data.get("settlements", [])
 
     today = datetime.utcnow().strftime("%Y-%m-%d")
 
     rows = []
 
-    for _, row in settlement_table.iterrows():
-
-        month = str(row["Month"]).strip()
-
-        if month.lower() == "month":
-            continue
+    for item in settlements:
 
         rows.append([
-            month,
-            row.get("Settle"),
-            row.get("Open"),
-            row.get("High"),
-            row.get("Low"),
-            row.get("Est. Volume"),
-            row.get("Prior Day OI"),
+            item.get("month"),
+            item.get("settle"),
+            item.get("open"),
+            item.get("high"),
+            item.get("low"),
+            item.get("last"),
+            item.get("change"),
+            item.get("volume"),
+            item.get("openInterest"),
             "TTF",
-            build_product_code(month),
-            today,
-            "CME"
+            build_product_code(item.get("month", "")),
+            today
         ])
-
-    header = [
-        "Delivery",
-        "Settlement",
-        "Open",
-        "High",
-        "Low",
-        "Volume",
-        "OpenInterest",
-        "Product",
-        "ProductCode",
-        "Date",
-        "Source"
-    ]
 
     with open(
         "cme_ttf_settlement.csv",
@@ -106,10 +73,25 @@ def scrape_cme_ttf():
     ) as f:
 
         writer = csv.writer(f)
-        writer.writerow(header)
+
+        writer.writerow([
+            "Delivery",
+            "Settlement",
+            "Open",
+            "High",
+            "Low",
+            "Last",
+            "Change",
+            "Volume",
+            "OpenInterest",
+            "Product",
+            "ProductCode",
+            "Date"
+        ])
+
         writer.writerows(rows)
 
-    print(f"Valmis: {len(rows)} riviä")
+    print(f"✓ {len(rows)} riviä tallennettu")
 
 
 if __name__ == "__main__":
