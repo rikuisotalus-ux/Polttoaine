@@ -1,70 +1,110 @@
+import pandas as pd
 import csv
-import requests
 from datetime import datetime
+import requests
+
+URL = (
+    "https://www.cmegroup.com/markets/energy/natural-gas/"
+    "dutch-ttf-natural-gas-financial-calendar-month.settlements.html"
+)
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "text/csv",
+    "User-Agent": "Mozilla/5.0"
 }
 
 
-# =========================
-# ✅ STOOQ (FIXED)
-# =========================
-def get_stooq(symbol):
+def build_product_code(month_str):
+    """
+    DEC 26 -> TTFDEC-26
+    JAN 27 -> TTFJAN-27
+    """
+
     try:
-        url = f"https://stooq.com/q/l/?s={symbol}&f=sd2t2ohlcv&h&e=csv"
-
-        r = requests.get(url, headers=HEADERS, timeout=10)
-
-        text = r.text.strip()
-
-        # varmista että oikea CSV eikä tyhjä/HTML
-        if "Close" not in text:
-            print(f"{symbol} -> no CSV data")
-            return None
-
-        lines = text.split("\n")
-
-        if len(lines) < 2:
-            return None
-
-        row = lines[1].split(",")
-
-        return float(row[6])
-
-    except Exception as e:
-        print(f"{symbol} error:", e)
+        month, yy = month_str.upper().split()
+        return f"TTF{month}-{yy}"
+    except Exception:
         return None
 
 
-# =========================
-# ✅ MAIN
-# =========================
-def run():
+def scrape_cme_ttf():
+
+    print("Hakee CME TTF settlementit...")
+
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
+    response = session.get(URL, timeout=30)
+    response.raise_for_status()
+
+    tables = pd.read_html(response.text)
+
+    if not tables:
+        raise Exception("Taulukkoa ei löytynyt")
+
+    settlement_table = None
+
+    for table in tables:
+        cols = [str(c).upper() for c in table.columns]
+
+        if "MONTH" in cols and "SETTLE" in cols:
+            settlement_table = table
+            break
+
+    if settlement_table is None:
+        raise Exception("Settlement-taulukkoa ei löytynyt")
 
     today = datetime.utcnow().strftime("%Y-%m-%d")
 
     rows = []
 
-    rows.append(["WTI", "cl.f", get_stooq("cl.f"), today])
-    rows.append(["BRENT", "bz.f", get_stooq("bz.f"), today])
-    rows.append(["TTF", "tg.f", get_stooq("tg.f"), today])
-    rows.append(["CO2_EUA", "ck.f", get_stooq("ck.f"), today])
+    for _, row in settlement_table.iterrows():
 
-    # Coal ei ole saatavilla ilmaiseksi → jätetään None
-    rows.append(["COAL_API2", "api2", None, today])
+        month = str(row["Month"]).strip()
 
-    with open("latest_fuels.csv", "w", newline="") as f:
+        if month.lower() == "month":
+            continue
+
+        rows.append([
+            month,
+            row.get("Settle"),
+            row.get("Open"),
+            row.get("High"),
+            row.get("Low"),
+            row.get("Est. Volume"),
+            row.get("Prior Day OI"),
+            "TTF",
+            build_product_code(month),
+            today,
+            "CME"
+        ])
+
+    header = [
+        "Delivery",
+        "Settlement",
+        "Open",
+        "High",
+        "Low",
+        "Volume",
+        "OpenInterest",
+        "Product",
+        "ProductCode",
+        "Date",
+        "Source"
+    ]
+
+    with open(
+        "cme_ttf_settlement.csv",
+        "w",
+        newline="",
+        encoding="utf-8"
+    ) as f:
+
         writer = csv.writer(f)
-        writer.writerow(["Product", "Symbol", "Price", "Date"])
+        writer.writerow(header)
         writer.writerows(rows)
 
-    print("✅ DONE")
-    for r in rows:
-        print(r)
+    print(f"Valmis: {len(rows)} riviä")
 
 
-# =========================
 if __name__ == "__main__":
-    run()
+    scrape_cme_ttf()
